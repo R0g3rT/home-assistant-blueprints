@@ -10,7 +10,7 @@ blueprint:
     **Hinweis:**
     * **Die Nutzung erfolgt auf eigene Gefahr!**
 
-  domain: script
+  domain: automation
   source_url: https://github.com/R0g3rT/home-assistant-blueprints
 
   input:

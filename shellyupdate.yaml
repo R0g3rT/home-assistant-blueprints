@@ -49,7 +49,7 @@ action:
       - conditions:
           - "{{ updates | length > 0 }}"
         sequence:
-          - service: notify.mobile_app_{{ trigger.to_state.context.user_id }}
+          - service: notify.persistent_notification
             data:
               title: "🔄 Home Assistant Auto-Update"
               message: |
@@ -66,7 +66,7 @@ action:
       - conditions:
           - "{{ updates | length == 0 }}"
         sequence:
-          - service: notify.mobile_app_{{ trigger.to_state.context.user_id }}
+          - service: notify.persistent_notification
             data:
               title: "✅ Keine Updates verfügbar"
               message: "Es sind keine neuen Updates für die Shelly Geräte verfügbar."

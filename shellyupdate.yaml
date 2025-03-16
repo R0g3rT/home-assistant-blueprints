@@ -10,7 +10,7 @@ blueprint:
     **Hinweis:**
     * **Die Nutzung erfolgt auf eigene Gefahr!**
 
-  domain: script
+  domain: automation
   source_url: https://github.com/R0g3rT/home-assistant-blueprints
 
   input:
@@ -19,8 +19,7 @@ blueprint:
       description: "Welcher Button startet das Update?"
       selector:
         entity:
-          filter:
-            domain: input_button
+          domain: input_button
 
     notify_device:
       name: Benachrichtigung an Gerät
@@ -32,7 +31,7 @@ blueprint:
 mode: single
 
 triggers:
-  - trigger: state
+  - platform: state
     entity_id: !input update_button
     from: "off"
     to: "on"
@@ -47,22 +46,24 @@ actions:
         | selectattr('state', 'eq', 'on')
         | map(attribute='entity_id')
         | list }}
-  - alias: "Check Update and Notify"
-    choose:
+
+  - choose:
       - conditions:
           - "{{ updates | length > 0 }}"
         sequence:
           - action: notify.persistent_notification
             data:
-              title: " Home Assistant Auto-Update"
+              title: "🔄 Home Assistant Auto-Update"
               message: |
                 ✅ Folgende Geräte wurden aktualisiert:
                 {% for entity in updates %}
                 - {{ state_attr(entity, 'friendly_name') }}
                 {% endfor %}
+
   - action: update.install
     target:
       entity_id: "{{ updates }}"
+
   - choose:
       - conditions:
           - "{{ updates | length == 0 }}"

@@ -10,7 +10,7 @@ blueprint:
     **Hinweis:**
     * **Die Nutzung erfolgt auf eigene Gefahr!**
 
-  domain: automation
+  domain: script
   source_url: https://github.com/R0g3rT/home-assistant-blueprints
 
   input:
@@ -30,15 +30,13 @@ blueprint:
 
 mode: single
 
-triggers:
+trigger:
   - platform: state
     entity_id: !input update_button
-    from: "off"
-    to: "on"
 
 condition: []
 
-actions:
+action:
   - variables:
       updates: >
         {{ states.update
@@ -51,7 +49,7 @@ actions:
       - conditions:
           - "{{ updates | length > 0 }}"
         sequence:
-          - action: notify.persistent_notification
+          - service: notify.persistent_notification
             data:
               title: "🔄 Home Assistant Auto-Update"
               message: |
@@ -60,7 +58,7 @@ actions:
                 - {{ state_attr(entity, 'friendly_name') }}
                 {% endfor %}
 
-  - action: update.install
+  - service: update.install
     target:
       entity_id: "{{ updates }}"
 
@@ -68,7 +66,7 @@ actions:
       - conditions:
           - "{{ updates | length == 0 }}"
         sequence:
-          - action: notify.persistent_notification
+          - service: notify.persistent_notification
             data:
               title: "✅ Keine Updates verfügbar"
               message: "Es sind keine neuen Updates für die Shelly Geräte verfügbar."

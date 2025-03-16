@@ -1,0 +1,73 @@
+blueprint:
+  name: Home Assistant Auto-Update by R0g3rT
+  description: >
+    # Home Assistant Auto Update
+
+    Führt alle verfügbaren Firmware- und Beta-Updates automatisch aus und sendet eine Benachrichtigung.
+
+    v1.0/2025.03.16
+
+    **Hinweis:**
+    * **Die Nutzung erfolgt auf eigene Gefahr!**
+
+  domain: script
+  source_url: https://github.com/R0g3rT/home-assistant-blueprints
+
+  input:
+    update_button:
+      name: Update-Button
+      description: "Welcher Button startet das Update?"
+      selector:
+        entity:
+          filter:
+            domain: input_button
+
+    notify_device:
+      name: Benachrichtigung an Gerät
+      description: "Wähle ein Gerät, das eine Benachrichtigung erhalten soll (optional)."
+      default: ""
+      selector:
+        device:
+
+mode: single
+
+triggers:
+  - trigger: state
+    entity_id: !input update_button
+    from: "off"
+    to: "on"
+
+condition: []
+
+actions:
+  - variables:
+      updates: >
+        {{ states.update
+        | selectattr('entity_id', 'search', 'beta_firmware|firmware')
+        | selectattr('state', 'eq', 'on')
+        | map(attribute='entity_id')
+        | list }}
+  - alias: "Check Update and Notify"
+    choose:
+      - conditions:
+          - "{{ updates | length > 0 }}"
+        sequence:
+          - action: notify.persistent_notification
+            data:
+              title: " Home Assistant Auto-Update"
+              message: |
+                ✅ Folgende Geräte wurden aktualisiert:
+                {% for entity in updates %}
+                - {{ state_attr(entity, 'friendly_name') }}
+                {% endfor %}
+  - action: update.install
+    target:
+      entity_id: "{{ updates }}"
+  - choose:
+      - conditions:
+          - "{{ updates | length == 0 }}"
+        sequence:
+          - action: notify.persistent_notification
+            data:
+              title: "✅ Keine Updates verfügbar"
+              message: "Es sind keine neuen Updates für die Shelly Geräte verfügbar."

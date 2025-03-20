@@ -1,69 +1,73 @@
 blueprint:
   name: Home Assistant Auto-Update by R0g3rT
-  description: "# Home Assistant Auto Update
+  description: >
+    # Home Assistant Auto Update
 
-    Führt alle verfügbaren Firmware- und Beta-Updates automatisch aus und sendet eine
-    Benachrichtigung.
+    Führt alle verfügbaren Firmware- und Beta-Updates automatisch aus und sendet eine Benachrichtigung.
 
     v1.0/2025.03.16
 
-    **Hinweis:** * **Die Nutzung erfolgt auf eigene Gefahr!**
+    **Hinweis:**
+    * **Die Nutzung erfolgt auf eigene Gefahr!**
 
-    "
-  domain: automation
-  source_url: https://github.com/R0g3rT/home-assistant-blueprints/blob/main/shellyupdate.yaml
+  domain: script
+  source_url: https://github.com/R0g3rT/home-assistant-blueprints
+
   input:
     update_button:
       name: Update-Button
-      description: Welcher Button startet das Update?
+      description: "Welcher Button startet das Update?"
       selector:
         entity:
-          domain:
-            - input_button
-          multiple: false
+          domain: input_button
+
     notify_device:
       name: Benachrichtigung an Gerät
-      description: Wähle ein Gerät, das eine Benachrichtigung erhalten soll (optional).
+      description: "Wähle ein Gerät, das eine Benachrichtigung erhalten soll (optional)."
       default: ""
       selector:
-        device: {}
+        device:
+
 mode: single
+
 trigger:
   - platform: state
     entity_id: !input update_button
+
 condition: []
+
 action:
   - variables:
-      updates:
-        "{{ states.update | selectattr('entity_id', 'search', 'beta_firmware|firmware')
-        | selectattr('state', 'eq', 'on') | map(attribute='entity_id') | list
-        }}
+      updates: >
+        {{ states.update
+        | selectattr('entity_id', 'search', 'beta_firmware|firmware')
+        | selectattr('state', 'eq', 'on')
+        | map(attribute='entity_id')
+        | list }}
+      notify_device: !input notify_device
 
-        "
   - choose:
       - conditions:
           - "{{ updates | length > 0 }}"
         sequence:
-          - service: notify.{{ device }}
+          - service: notify.mobile_app_{{ device_attr(notify_device, 'name') | lower | replace(' ', '_') }}
             data:
-              title: "\U0001F504 Home Assistant Auto-Update"
-              message: "✅ Folgende Geräte wurden aktualisiert:
-
+              title: "🔄 Home Assistant Auto-Update"
+              message: |
+                ✅ Folgende Geräte wurden aktualisiert:
                 {% for entity in updates %}
-
                 - {{ state_attr(entity, 'friendly_name') }}
-
                 {% endfor %}
 
-                "
   - service: update.install
     target:
       entity_id: "{{ updates }}"
+
   - choose:
       - conditions:
           - "{{ updates | length == 0 }}"
         sequence:
-          - service: notify.{{ device }}
+          - service: notify.mobile_app_{{ device_attr(notify_device, 'name') | lower | replace(' ', '_') }}
             data:
-              title: ✅ Keine Updates verfügbar
-              message: Es sind keine neuen Updates für die Shelly Geräte verfügbar.
+              title: "✅ Keine Updates verfügbar"
+              message: "Es sind keine neuen Updates für die Shelly Geräte verfügbar."

@@ -1,7 +1,9 @@
 blueprint:
-  name: Device ready (power + helper) [i18n + TTS] v1.1
+  name: Device ready created by R0g3rT
   description: >
-    "# Device ready / Gerät fertig (v1.1 / 2025-12-25)
+    "# Device ready / Gerät fertig 
+    
+    Version 1.1  2025-12-25
     
     Detects device finished state via power sensor. Prevents standby-trigger spam by using a selectable helper.
     Auto-selects DE/EN messages based on Home Assistant UI language (sensor.language / sensor.system_language).

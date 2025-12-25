@@ -1,0 +1,141 @@
+blueprint:
+  name: Gerät fertig (Leistungsaufnahme + Helper)
+  description: "# Device ready
+
+    Erkennt zuverlässig das Ende eines Geräts anhand der Leistungsaufnahme.
+    Ein auswählbarer Helper merkt sich, ob das Gerät wirklich lief.
+
+    v1.0/2025.12.25
+
+    **Hinweis:** * **Die Nutzung erfolgt auf eigene Gefahr!**
+
+    "
+  domain: automation
+  source_url: https://github.com/R0g3rT/home-assistant-blueprints
+  input:
+    power_sensor:
+      name: Leistungssensor
+      selector:
+        entity:
+          domain: sensor
+
+    running_power:
+      name: Leistung während Betrieb (W)
+      default: 15
+      selector:
+        number:
+          min: 5
+          max: 3000
+          unit_of_measurement: W
+
+    finished_power:
+      name: Leistung nach Ende (W)
+      default: 5
+      selector:
+        number:
+          min: 0
+          max: 20
+          unit_of_measurement: W
+
+    finished_duration:
+      name: Dauer unter End-Leistung
+      default:
+        minutes: 5
+      selector:
+        duration:
+
+    run_helper:
+      name: Helper „Gerät lief“
+      description: Wird gesetzt, sobald das Gerät gestartet ist
+      selector:
+        entity:
+          domain: input_boolean
+
+    notify_all:
+      name: Allgemeine Benachrichtigung
+      selector:
+        target:
+
+    notify_special:
+      name: Zusätzliche Benachrichtigung (optional)
+      default: {}
+      selector:
+        target:
+
+    message_all:
+      name: Allgemeine Nachricht
+      default: "Das Gerät ist fertig und kann ausgeräumt werden."
+      selector:
+        text:
+
+    message_special:
+      name: Spezielle Nachricht
+      default: ""
+      selector:
+        text:
+
+mode: single
+
+trigger:
+  # ======================
+  # Gerät gestartet
+  # ======================
+  - platform: numeric_state
+    entity_id: !input power_sensor
+    above: !input running_power
+    for:
+      minutes: 2
+    id: started
+
+  # ======================
+  # Gerät beendet
+  # ======================
+  - platform: numeric_state
+    entity_id: !input power_sensor
+    below: !input finished_power
+    for: !input finished_duration
+    id: finished
+
+condition: []
+
+action:
+  - choose:
+      # ----------------------
+      # Start erkannt
+      # ----------------------
+      - conditions:
+          - condition: trigger
+            id: started
+        sequence:
+          - service: input_boolean.turn_on
+            target:
+              entity_id: !input run_helper
+
+      # ----------------------
+      # Ende erkannt
+      # ----------------------
+      - conditions:
+          - condition: trigger
+            id: finished
+          - condition: state
+            entity_id: !input run_helper
+            state: "on"
+        sequence:
+          - service: notify.send_message
+            target: !input notify_all
+            data:
+              message: !input message_all
+
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ message_special != '' }}"
+                sequence:
+                  - service: notify.send_message
+                    target: !input notify_special
+                    data:
+                      message: !input message_special
+
+          - service: input_boolean.turn_off
+            target:
+              entity_id: !input run_helper

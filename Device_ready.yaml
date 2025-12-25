@@ -65,6 +65,19 @@ blueprint:
         entity:
           domain: input_boolean
 
+    notify_time_start:
+      name: Notification start time / Startzeit Benachrichtigungen
+      default: "06:00:00"
+      selector:
+        time:
+
+    notify_time_end:
+      name: Notification end time / Endzeit Benachrichtigungen
+      default: "20:00:00"
+      selector:
+        time:
+
+
     # -----------------------
     # Notifications (text)
     # -----------------------
@@ -146,6 +159,17 @@ blueprint:
 mode: single
 
 variables:
+
+   notify_allowed: >-
+    {% set now_t = now().strftime('%H:%M:%S') %}
+    {% set start = blueprint.inputs.notify_time_start %}
+    {% set end = blueprint.inputs.notify_time_end %}
+    {% if start < end %}
+      {{ start <= now_t <= end }}
+    {% else %}
+      {{ now_t >= start or now_t <= end }}
+    {% endif %}
+
   # HA language entity varies by version/installation. We try both.
   ha_lang: >-
     {% set l = states('sensor.language') %}
@@ -202,6 +226,9 @@ action:
           - condition: state
             entity_id: !input run_helper
             state: "on"
+          - condition: template
+            value_template: "{{ notify_allowed }}"
+
         sequence:
           # Text notifications
           - service: notify.send_message

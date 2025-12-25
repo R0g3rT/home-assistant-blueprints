@@ -1,73 +1,270 @@
 blueprint:
-  name: Home Assistant Auto-Update by R0g3rT
-  description: >
-    # Home Assistant Auto Update
+  name: Home Assistant Auto-Update Enhanced by R0g3rT
+  description: "# Home Assistant Auto Update Enhanced
 
-    Führt alle verfügbaren Firmware- und Beta-Updates automatisch aus und sendet eine Benachrichtigung.
+    Prüft alle verfügbaren Updates zu einer festgelegten Uhrzeit, benachrichtigt bei neuen Updates und führt diese auf Wunsch automatisch aus.
+    Benachrichtigungen erfolgen per Mobile App und als persistente Benachrichtigung im Dashboard.
 
-    v1.0/2025.03.16
+    v1.4/2025.04.18
 
-    **Hinweis:**
-    * **Die Nutzung erfolgt auf eigene Gefahr!**
+    **Hinweis:** * **Die Nutzung erfolgt auf eigene Gefahr!**
 
+    "
   domain: automation
-  source_url: https://github.com/R0g3rT/home-assistant-blueprints
-
+  source_url:  source_url: https://github.com/R0g3rT/home-assistant-blueprints
   input:
     update_button:
       name: Update-Button
-      description: "Welcher Button startet das Update?"
+      description: Welcher Button startet das Update?
       selector:
         entity:
-          domain: input_button
-
-    notify_device:
-      name: Benachrichtigung an Gerät
-      description: "Wähle ein Gerät, das eine Benachrichtigung erhalten soll (optional)."
+          domain:
+            - input_button
+          multiple: false
+    auto_update:
+      name: Updates automatisch installieren
+      description: Wenn aktiviert, werden Updates automatisch installiert. Andernfalls wird nur eine Benachrichtigung gesendet.
+      default: false
+      selector:
+        boolean: {}
+    check_time:
+      name: Prüfzeitpunkt
+      description: Zu welcher Uhrzeit soll täglich nach Updates gesucht werden?
+      default: "03:00:00"
+      selector:
+        time: {}
+    notify_device_primary:
+      name: Primäres Benachrichtigungsgerät
+      description: Wähle ein Gerät, das eine Benachrichtigung erhalten soll.
+      selector:
+        device: {}
+    notify_device_secondary:
+      name: Zusätzliches Benachrichtigungsgerät (optional)
+      description: Wähle ein zweites Gerät, das ebenfalls benachrichtigt werden soll (optional).
       default: ""
       selector:
-        device:
-
+        device: {}
+    persistent_notification:
+      name: Persistente Benachrichtigung
+      description: Zeigt eine Benachrichtigung im Home Assistant Dashboard an
+      default: true
+      selector:
+        boolean: {}
 mode: single
-
 trigger:
   - platform: state
     entity_id: !input update_button
-
+    id: manual_trigger
+  - platform: time
+    at: !input check_time
+    id: scheduled_check
 condition: []
-
 action:
   - variables:
-      updates: >
-        {{ states.update
-        | selectattr('entity_id', 'search', 'beta_firmware|firmware')
-        | selectattr('state', 'eq', 'on')
-        | map(attribute='entity_id')
-        | list }}
-      notify_device: !input notify_device
+      updates: "{{ states.update | selectattr('state', 'eq', 'on') | map(attribute='entity_id') | list }}"
+      primary_device: !input notify_device_primary
+      secondary_device: !input notify_device_secondary
+      triggered_by: "{{ trigger.id }}"
+      auto_update: !input auto_update
+      show_persistent: !input persistent_notification
+      notification_id: 'home_assistant_updates_{{ now().strftime("%Y%m%d") }}'
 
+      # Formatierte Liste für die Benachrichtigungen
+      update_list: >-
+        {% set ns = namespace(list='') %}
+        {% for entity_id in updates %}
+          {% set name = state_attr(entity_id, 'friendly_name') or entity_id.split('.')[1] %}
+          {% set ns.list = ns.list ~ '• ' ~ name ~ '\n' %}
+        {% endfor %}
+        {{ ns.list | trim }}
+
+      # Nachrichtentexte als Variablen
+      msg_updates_installed: >-
+        ✅ Folgende Geräte wurden aktualisiert:
+
+        {{ update_list }}
+
+      msg_no_updates: >-
+        Es sind aktuell keine Updates für deine Geräte verfügbar.
+
+      msg_updates_available: >-
+        📢 Folgende Updates sind verfügbar ({{ updates | length }}):
+
+
+        {{ update_list }}
+        {% if auto_update %}
+
+        Updates werden automatisch installiert.
+        {% else %}
+
+
+        Drücke den Update-Button, um die Updates zu installieren.
+        {% endif %}
+
+      msg_auto_updated: >-
+        ✅ Folgende Geräte wurden automatisch aktualisiert:
+
+          
+        {{ update_list }}
+
+  # Bei Knopfdruck direkt Updates installieren und dann Benachrichtigung senden
   - choose:
       - conditions:
-          - "{{ updates | length > 0 }}"
+          - '{{ triggered_by == "manual_trigger" }}'
         sequence:
-          - service: notify.mobile_app_{{ device_attr(notify_device, 'name') | lower | replace(' ', '_') }}
-            data:
-              title: "🔄 Home Assistant Auto-Update"
-              message: |
-                ✅ Folgende Geräte wurden aktualisiert:
-                {% for entity in updates %}
-                - {{ state_attr(entity, 'friendly_name') }}
-                {% endfor %}
+          # Erst Updates installieren, wenn der Button gedrückt wurde
+          - choose:
+              - conditions:
+                  - "{{ updates | length > 0 }}"
+                sequence:
+                  - service: update.install
+                    target:
+                      entity_id: "{{ updates }}"
 
-  - service: update.install
-    target:
-      entity_id: "{{ updates }}"
+                  # Persistente Benachrichtigung (wenn aktiviert)
+                  - choose:
+                      - conditions:
+                          - "{{ show_persistent == true }}"
+                        sequence:
+                          - service: persistent_notification.create
+                            data:
+                              title: "🔄 Home Assistant Update"
+                              message: "{{ msg_updates_installed }}"
+                              notification_id: "{{ notification_id }}_installed"
 
-  - choose:
+                  # Erfolgsbenachrichtigung an primäres Gerät
+                  - service: >-
+                      {% if device_attr(primary_device, 'name') %}
+                      notify.mobile_app_{{ device_attr(primary_device, 'name') | lower | replace(' ', '_') }}
+                      {% else %}
+                      notify.notify
+                      {% endif %}
+                    data:
+                      title: "🔄 Home Assistant Update"
+                      message: "{{ msg_updates_installed }}"
+
+                  # Erfolgsbenachrichtigung an sekundäres Gerät (falls vorhanden)
+                  - choose:
+                      - conditions:
+                          - '{{ device_attr(secondary_device, "name") != None }}'
+                        sequence:
+                          - service: notify.mobile_app_{{ device_attr(secondary_device, 'name') | lower | replace(' ', '_') }}
+                            data:
+                              title: "🔄 Home Assistant Update"
+                              message: "{{ msg_updates_installed }}"
+
+              - conditions:
+                  - "{{ updates | length == 0 }}"
+                sequence:
+                  # Persistente Benachrichtigung (wenn aktiviert)
+                  - choose:
+                      - conditions:
+                          - "{{ show_persistent == true }}"
+                        sequence:
+                          - service: persistent_notification.create
+                            data:
+                              title: "✅ Keine Updates verfügbar"
+                              message: "{{ msg_no_updates }}"
+                              notification_id: "{{ notification_id }}_no_updates"
+
+                  # Benachrichtigung an primäres Gerät
+                  - service: >-
+                      {% if device_attr(primary_device, 'name') %}
+                      notify.mobile_app_{{ device_attr(primary_device, 'name') | lower | replace(' ', '_') }}
+                      {% else %}
+                      notify.notify
+                      {% endif %}
+                    data:
+                      title: "✅ Keine Updates verfügbar"
+                      message: "{{ msg_no_updates }}"
+
+                  # Benachrichtigung an sekundäres Gerät (falls vorhanden)
+                  - choose:
+                      - conditions:
+                          - '{{ device_attr(secondary_device, "name") != None }}'
+                        sequence:
+                          - service: notify.mobile_app_{{ device_attr(secondary_device, 'name') | lower | replace(' ', '_') }}
+                            data:
+                              title: "✅ Keine Updates verfügbar"
+                              message: "{{ msg_no_updates }}"
+
+      # Zeitgesteuerter Check und Benachrichtigung (mit optionalem Auto-Update)
       - conditions:
-          - "{{ updates | length == 0 }}"
+          - '{{ triggered_by == "scheduled_check" }}'
         sequence:
-          - service: notify.mobile_app_{{ device_attr(notify_device, 'name') | lower | replace(' ', '_') }}
-            data:
-              title: "✅ Keine Updates verfügbar"
-              message: "Es sind keine neuen Updates für die Shelly Geräte verfügbar."
+          - choose:
+              - conditions:
+                  - "{{ updates | length > 0 }}"
+                sequence:
+                  # Persistente Benachrichtigung (wenn aktiviert)
+                  - choose:
+                      - conditions:
+                          - "{{ show_persistent == true }}"
+                        sequence:
+                          - service: persistent_notification.create
+                            data:
+                              title: "🔄 Home Assistant Update-Check"
+                              message: "{{ msg_updates_available }}"
+                              notification_id: "{{ notification_id }}_available"
+
+                  # Benachrichtigung an primäres Gerät senden
+                  - service: >-
+                      {% if device_attr(primary_device, 'name') %}
+                      notify.mobile_app_{{ device_attr(primary_device, 'name') | lower | replace(' ', '_') }}
+                      {% else %}
+                      notify.notify
+                      {% endif %}
+                    data:
+                      title: "🔄 Home Assistant Update-Check"
+                      message: "{{ msg_updates_available }}"
+
+                  # Benachrichtigung an sekundäres Gerät senden (falls vorhanden)
+                  - choose:
+                      - conditions:
+                          - '{{ device_attr(secondary_device, "name") != None }}'
+                        sequence:
+                          - service: notify.mobile_app_{{ device_attr(secondary_device, 'name') | lower | replace(' ', '_') }}
+                            data:
+                              title: "🔄 Home Assistant Update-Check"
+                              message: "{{ msg_updates_available }}"
+
+                  # Auto-Update wenn aktiviert
+                  - choose:
+                      - conditions:
+                          - "{{ auto_update == true }}"
+                        sequence:
+                          - service: update.install
+                            target:
+                              entity_id: "{{ updates }}"
+
+                          # Persistente Benachrichtigung (wenn aktiviert)
+                          - choose:
+                              - conditions:
+                                  - "{{ show_persistent == true }}"
+                                sequence:
+                                  - service: persistent_notification.create
+                                    data:
+                                      title: "🔄 Home Assistant Auto-Update"
+                                      message: "{{ msg_auto_updated }}"
+                                      notification_id: "{{ notification_id }}_auto_installed"
+
+                          # Erfolgsbenachrichtigung an primäres Gerät
+                          - service: >-
+                              {% if device_attr(primary_device, 'name') %}
+                              notify.mobile_app_{{ device_attr(primary_device, 'name') | lower | replace(' ', '_') }}
+                              {% else %}
+                              notify.notify
+                              {% endif %}
+                            data:
+                              title: "🔄 Home Assistant Auto-Update"
+                              message: "{{ msg_auto_updated }}"
+
+                          # Erfolgsbenachrichtigung an sekundäres Gerät (falls vorhanden)
+                          - choose:
+                              - conditions:
+                                  - '{{ device_attr(secondary_device, "name") != None }}'
+                                sequence:
+                                  - service: notify.mobile_app_{{ device_attr(secondary_device, 'name') | lower | replace(' ', '_') }}
+                                    data:
+                                      title: "🔄 Home Assistant Auto-Update"
+                                      message: "{{ msg_auto_updated }}"

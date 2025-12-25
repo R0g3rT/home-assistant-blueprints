@@ -1,26 +1,24 @@
 blueprint:
-  name: Gerät fertig (Leistungsaufnahme + Helper)
-  description: "# Device ready
+  name: Device ready (power + helper) [i18n + TTS] v1.1
+  description: >
+    # Device ready / Gerät fertig (v1.1 / 2025-12-25)
+    Detects device finished state via power sensor. Prevents standby-trigger spam by using a selectable helper.
+    Auto-selects DE/EN messages based on Home Assistant UI language (sensor.language / sensor.system_language).
+    Optional TTS output with automatic language mapping.
 
-    Erkennt zuverlässig das Ende eines Geräts anhand der Leistungsaufnahme.
-    Ein auswählbarer Helper merkt sich, ob das Gerät wirklich lief.
-
-    v1.0/2025.12.25
-
-    **Hinweis:** * **Die Nutzung erfolgt auf eigene Gefahr!**
-
-    "
+    Hinweis: Nutzung auf eigene Gefahr.
   domain: automation
-  source_url: https://github.com/R0g3rT/home-assistant-blueprints
+  source_url: https://github.com/R0g3rT/home-assistant-blueprints/blob/main/Device_ready.yaml
+
   input:
     power_sensor:
-      name: Leistungssensor
+      name: Power sensor / Leistungssensor
       selector:
         entity:
           domain: sensor
 
     running_power:
-      name: Leistung während Betrieb (W)
+      name: Running power threshold (W) / Leistung während Betrieb (W)
       default: 15
       selector:
         number:
@@ -28,8 +26,15 @@ blueprint:
           max: 3000
           unit_of_measurement: W
 
+    running_for:
+      name: Running must persist / Betrieb muss anliegen
+      default:
+        minutes: 2
+      selector:
+        duration:
+
     finished_power:
-      name: Leistung nach Ende (W)
+      name: Finished power threshold (W) / Leistung nach Ende (W)
       default: 5
       selector:
         number:
@@ -38,70 +43,138 @@ blueprint:
           unit_of_measurement: W
 
     finished_duration:
-      name: Dauer unter End-Leistung
+      name: Finished must persist / Ende muss anliegen
       default:
         minutes: 5
       selector:
         duration:
 
     run_helper:
-      name: Helper „Gerät lief“
-      description: Wird gesetzt, sobald das Gerät gestartet ist
+      name: Helper "device ran" / Helper „Gerät lief“
+      description: Set to ON when device started; required to avoid standby false positives.
       selector:
         entity:
           domain: input_boolean
 
+    # -----------------------
+    # Notifications (text)
+    # -----------------------
     notify_all:
-      name: Allgemeine Benachrichtigung
+      name: Notify targets (text) / Benachrichtigung (Text)
       selector:
         target:
 
     notify_special:
-      name: Zusätzliche Benachrichtigung (optional)
+      name: Notify targets special (text, optional) / Extra Text (optional)
       default: {}
       selector:
         target:
 
-    message_all:
-      name: Allgemeine Nachricht
+    message_all_de:
+      name: Message DE (all)
       default: "Das Gerät ist fertig und kann ausgeräumt werden."
       selector:
         text:
 
-    message_special:
-      name: Spezielle Nachricht
+    message_all_en:
+      name: Message EN (all)
+      default: "The device has finished and can be unloaded."
+      selector:
+        text:
+
+    message_special_de:
+      name: Message DE (special, optional)
+      default: ""
+      selector:
+        text:
+
+    message_special_en:
+      name: Message EN (special, optional)
+      default: ""
+      selector:
+        text:
+
+    # -----------------------
+    # TTS (optional)
+    # -----------------------
+    tts_enabled:
+      name: Enable TTS / TTS aktivieren
+      default: false
+      selector:
+        boolean:
+
+    tts_service:
+      name: TTS service (e.g. tts.google_translate_say / tts.speak)
+      description: >
+        Example: tts.google_translate_say (legacy) or tts.speak (newer).
+        Must match your HA setup.
+      default: ""
+      selector:
+        text:
+
+    tts_media_player:
+      name: Media player(s) for TTS
+      default: {}
+      selector:
+        target:
+          entity:
+            domain: media_player
+
+    tts_voice_de:
+      name: Voice DE (optional)
+      description: Leave empty if your TTS integration doesn't support voice parameter.
+      default: ""
+      selector:
+        text:
+
+    tts_voice_en:
+      name: Voice EN (optional)
+      description: Leave empty if your TTS integration doesn't support voice parameter.
       default: ""
       selector:
         text:
 
 mode: single
 
+variables:
+  # HA language entity varies by version/installation. We try both.
+  ha_lang: >-
+    {% set l = states('sensor.language') %}
+    {% if l in ['unknown','unavailable','none','None',''] %}
+      {{ states('sensor.system_language') }}
+    {% else %}
+      {{ l }}
+    {% endif %}
+  # Normalize: 'de-DE' -> 'de', 'en-US' -> 'en'
+  lang2: "{{ (ha_lang or 'en')[:2] | lower }}"
+  # Choose messages
+  msg_all: >-
+    {% if lang2 == 'de' %}{{ iif(true, blueprint.inputs.message_all_de, '') }}{% else %}{{ iif(true, blueprint.inputs.message_all_en, '') }}{% endif %}
+  msg_special: >-
+    {% if lang2 == 'de' %}{{ iif(true, blueprint.inputs.message_special_de, '') }}{% else %}{{ iif(true, blueprint.inputs.message_special_en, '') }}{% endif %}
+  # TTS language codes (common)
+  tts_lang: >-
+    {% if lang2 == 'de' %}de-DE{% else %}en-US{% endif %}
+  tts_voice: >-
+    {% if lang2 == 'de' %}{{ iif(true, blueprint.inputs.tts_voice_de, '') }}{% else %}{{ iif(true, blueprint.inputs.tts_voice_en, '') }}{% endif %}
+
 trigger:
-  # ======================
-  # Gerät gestartet
-  # ======================
   - platform: numeric_state
     entity_id: !input power_sensor
     above: !input running_power
-    for:
-      minutes: 2
+    for: !input running_for
     id: started
 
-  # ======================
-  # Gerät beendet
-  # ======================
   - platform: numeric_state
     entity_id: !input power_sensor
     below: !input finished_power
     for: !input finished_duration
     id: finished
 
-condition: []
-
 action:
   - choose:
       # ----------------------
-      # Start erkannt
+      # Start detected
       # ----------------------
       - conditions:
           - condition: trigger
@@ -112,7 +185,7 @@ action:
               entity_id: !input run_helper
 
       # ----------------------
-      # Ende erkannt
+      # Finished detected (only if it ran)
       # ----------------------
       - conditions:
           - condition: trigger
@@ -121,21 +194,75 @@ action:
             entity_id: !input run_helper
             state: "on"
         sequence:
+          # Text notifications
           - service: notify.send_message
             target: !input notify_all
             data:
-              message: !input message_all
+              message: "{{ msg_all }}"
 
           - choose:
               - conditions:
                   - condition: template
-                    value_template: "{{ message_special != '' }}"
+                    value_template: "{{ (msg_special | default('')) | trim != '' }}"
                 sequence:
                   - service: notify.send_message
                     target: !input notify_special
                     data:
-                      message: !input message_special
+                      message: "{{ msg_special }}"
 
+          # Optional TTS
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: >-
+                      {{ (blueprint.inputs.tts_enabled | default(false)) and
+                         (blueprint.inputs.tts_service | default('') | trim != '') and
+                         (blueprint.inputs.tts_media_player is not none) }}
+                sequence:
+                  # Works for most common services:
+                  # - tts.google_translate_say: data: { entity_id, message, language }
+                  # - tts.speak: data: { media_player_entity_id, message, language, options: { voice } }
+                  - choose:
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ blueprint.inputs.tts_service | trim == 'tts.speak' }}"
+                        sequence:
+                          - service: tts.speak
+                            data:
+                              media_player_entity_id: >-
+                                {% if blueprint.inputs.tts_media_player.entity_id is defined %}
+                                  {{ blueprint.inputs.tts_media_player.entity_id }}
+                                {% else %}
+                                  {{ [] }}
+                                {% endif %}
+                              message: "{{ msg_all }}"
+                              language: "{{ tts_lang }}"
+                              options: >-
+                                {% set v = (tts_voice | default('') | trim) %}
+                                {% if v != '' %}
+                                  {{ dict(voice=v) }}
+                                {% else %}
+                                  {{ dict() }}
+                                {% endif %}
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ blueprint.inputs.tts_service | trim != 'tts.speak' }}"
+                        sequence:
+                          - service: "{{ blueprint.inputs.tts_service | trim }}"
+                            data:
+                              entity_id: >-
+                                {% if blueprint.inputs.tts_media_player.entity_id is defined %}
+                                  {{ blueprint.inputs.tts_media_player.entity_id }}
+                                {% else %}
+                                  {{ [] }}
+                                {% endif %}
+                              message: "{{ msg_all }}"
+                              language: "{{ tts_lang }}"
+                              # Some services ignore this safely:
+                              voice: "{{ (tts_voice | default('') | trim) }}"
+            default: []
+
+          # Reset helper so it triggers only once per cycle
           - service: input_boolean.turn_off
             target:
               entity_id: !input run_helper

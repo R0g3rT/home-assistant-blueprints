@@ -1,6 +1,7 @@
 blueprint:
   name: Device ready created by R0g3rT
-  description: "# Device ready / Gerät fertig    
+  description: "# Device ready / Gerät fertig   
+  
     Version 1.1  2025-12-25
     
     Detects device finished state via power sensor. Prevents standby-trigger spam by using a selectable helper.
@@ -12,6 +13,7 @@ blueprint:
     Optionale TTS-Ausgabe mit automatischer Sprachzuordnung.
 
     **Hinweis:** * **Die Nutzung erfolgt auf eigene Gefahr!**
+    
     **Information:** * **You use this at your own risk!**
     "
   domain: automation

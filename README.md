@@ -30,7 +30,7 @@ Home Assistant unterstützt den direkten Import von Blueprints über eine URL.
 3. Unten rechts auf **„Blueprint importieren“** klicken
 4. Die **Raw-URL** des gewünschten Blueprints einfügen  
    Beispiel:
-    https://raw.githubusercontent.com/<USER>/<REPO>/main/<BlueprintName>.yaml
+   https://github.com/R0g3rT/home-assistant-blueprints/blob/main/Device_ready.yaml
 5. **Vorschau** prüfen und **Importieren**
 
 Der Blueprint steht danach sofort zur Verfügung.
